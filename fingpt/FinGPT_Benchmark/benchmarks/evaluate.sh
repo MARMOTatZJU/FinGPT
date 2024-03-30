@@ -6,12 +6,20 @@
 
 #---- Relation Extraction ----
 
-python benchmarks.py \
---dataset re \
---base_model llama2 \
---peft_model ../finetuned_models/finred-llama2-linear_202310012254 \
---batch_size 8 \
---max_length 512
+#!/usr/bin/bash
+
+CUDA_VISIBLE_DEVICES=2,3 python benchmarks-extension.py \
+    --base_model /mnt/workspace/wenhaowang/llama2 \
+    # --peft_model ../finetuned_models/finred-llama2-linear_202310012254 \
+    --batch_size 8 \
+    --max_length 512 
+
+# python benchmarks.py \
+# --dataset fpb \
+# --base_model llama2 \
+# --peft_model ../finetuned_models/finred-llama2-linear_202310012254 \
+# --batch_size 8 \
+# --max_length 512
 
 # python benchmarks.py \
 # --dataset re \

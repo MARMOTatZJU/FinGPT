@@ -2,11 +2,10 @@ import warnings
 warnings.filterwarnings("ignore")
 
 from sklearn.metrics import accuracy_score,f1_score
-from datasets import load_dataset, load_from_disk
+from datasets import load_dataset
 from tqdm import tqdm
 import datasets
 import torch
-from pathlib import Path
 
 dic = {
     'strong negative':"negative",
@@ -18,11 +17,19 @@ dic = {
     'neutral':'neutral',
 }
 
+# def format_example(example: dict) -> dict:
+#     context = f"Instruction: {example['instruction']}\n"
+#     if example.get("input"):
+#         context += f"Input: {example['input']}\n"
+#     context += "Answer: "
+#     target = example["output"]
+#     return {"context": context, "target": target}
 def format_example(example: dict) -> dict:
-    context = f"Instruction: {example['instruction']}\n"
+    context = f"Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n### Instruction:\n {example['instruction']}\n\n"
     if example.get("input"):
-        context += f"Input: {example['input']}\n"
-    context += "Answer: "
+        context += f"### Input:\n {example['input']}\n\n"
+    # context += "Answer: "
+    context += "### Response: "
     target = example["output"]
     return {"context": context, "target": target}
 
@@ -34,15 +41,13 @@ def change_target(x):
     else:
         return 'neutral'
 
-def test_nwgi(args, model, tokenizer, prompt_fun=None):
-    batch_size = args.batch_size
-    # dataset = load_dataset('oliverwang15/news_with_gpt_instructions')
-    dataset = load_from_disk(Path(__file__).parent.parent / 'data/news_with_gpt_instructions/')
+def test_nwgi(model, tokenizer, batch_size, prompt_fun = None ):
+    dataset = datasets.load_dataset("oliverwang15/news_with_gpt_instructions")
+    dataset = dataset['test'].to_pandas()
     dataset['output'] = dataset['label'].apply(lambda x:dic[x])
 
     if prompt_fun is None:
         dataset["instruction"] = "What is the sentiment of this news? Please choose an answer from {negative/neutral/positive}."
-        # dataset["instruction"] = "What is the sentiment of this news? Please choose an answer from {strong negative/moderately negative/mildly negative/neutral/mildly positive/moderately positive/strong positive}."
     else:
         dataset["instruction"] = dataset.apply(prompt_fun, axis = 1)
     dataset["input"] = dataset["news"]
@@ -62,13 +67,12 @@ def test_nwgi(args, model, tokenizer, prompt_fun=None):
     out_text_list = []
     for i in tqdm(range(total_steps)):
         tmp_context = context[i* batch_size:(i+1)* batch_size]
-        tokens = tokenizer(tmp_context, return_tensors='pt', padding=True, max_length=512, return_token_type_ids=False)
-        # tokens.pop('token_type_ids')
+        tokens = tokenizer(tmp_context, return_tensors='pt', padding=True, max_length=512)
         for k in tokens.keys():
             tokens[k] = tokens[k].cuda()
-        res = model.generate(**tokens, max_length=512, eos_token_id=tokenizer.eos_token_id)
-        res_sentences = [tokenizer.decode(i, skip_special_tokens=True) for i in res]
-        out_text = [o.split("Answer: ")[1] for o in res_sentences]
+        res = model.generate(**tokens, max_length=512)
+        res_sentences = [tokenizer.decode(i) for i in res]
+        out_text = [o.split("Response: ")[1] for o in res_sentences]
         out_text_list += out_text
         torch.cuda.empty_cache()
 
@@ -83,4 +87,4 @@ def test_nwgi(args, model, tokenizer, prompt_fun=None):
 
     print(f"Acc: {acc}. F1 macro: {f1_macro}. F1 micro: {f1_micro}. F1 weighted (BloombergGPT): {f1_weighted}. ")
 
-    return dataset
+    return dataset, acc, [f1_macro, f1_micro, f1_weighted]
